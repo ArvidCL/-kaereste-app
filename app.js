@@ -44,9 +44,15 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
+function formatLocalDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function todayString() {
-  const now = new Date();
-  return now.toISOString().slice(0, 10);
+  return formatLocalDate(new Date());
 }
 
 function byDateTime(a, b) {
@@ -294,7 +300,7 @@ function renderCalendarGrid() {
     const dayNum = i - startWeekday + 1;
     const cellDate = new Date(year, month, dayNum);
     const isCurrentMonth = dayNum >= 1 && dayNum <= daysInMonth;
-    const iso = cellDate.toISOString().slice(0, 10);
+    const iso = formatLocalDate(cellDate);
     const dayEvents = state.data.calendar.filter((item) => item.date === iso);
 
     const cell = document.createElement("div");
