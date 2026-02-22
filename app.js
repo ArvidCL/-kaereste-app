@@ -1,4 +1,19 @@
-﻿const storageKey = "cute-synk-app-data";
+﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAiWPzEintJjv9X6nWSxs05U0giP3IXQ30",
+  authDomain: "kaereste-app.firebaseapp.com",
+  projectId: "kaereste-app",
+  storageBucket: "kaereste-app.firebasestorage.app",
+  messagingSenderId: "193077277457",
+  appId: "1:193077277457:web:7a74712428f26a20fa92b0",
+  measurementId: "G-PCJEPHYFM8"
+};
+
+const roomId = "ida-arvid";
+
+const storageKey = "cute-synk-app-data";
 
 const defaultData = {
   calendar: [],
@@ -13,6 +28,12 @@ const state = {
     year: new Date().getFullYear(),
     month: new Date().getMonth(),
     selectedDate: todayString()
+  },
+  sync: {
+    clientId: getClientId(),
+    lastRemoteUpdatedAt: 0,
+    suppressRemoteWrite: false,
+    ready: false
   }
 };
 
@@ -30,6 +51,7 @@ function loadData() {
 
 function saveData() {
   localStorage.setItem(storageKey, JSON.stringify(state.data));
+  scheduleRemoteSave();
 }
 
 function isValidData(data) {
@@ -44,6 +66,16 @@ function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
+function getClientId() {
+  const key = "cute-synk-client-id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = uid();
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
 function formatLocalDate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
@@ -53,6 +85,72 @@ function formatLocalDate(date) {
 
 function todayString() {
   return formatLocalDate(new Date());
+}
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const roomRef = doc(db, "rooms", roomId);
+let remoteSaveTimer = null;
+
+function scheduleRemoteSave() {
+  if (!state.sync.ready || state.sync.suppressRemoteWrite) return;
+  if (remoteSaveTimer) clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = setTimeout(pushRemote, 600);
+}
+
+async function pushRemote() {
+  if (!state.sync.ready || state.sync.suppressRemoteWrite) return;
+  const payload = {
+    data: state.data,
+    updatedAt: Date.now(),
+    updatedBy: state.sync.clientId
+  };
+  try {
+    await setDoc(roomRef, payload);
+    state.sync.lastRemoteUpdatedAt = payload.updatedAt;
+  } catch (err) {
+    console.error("Kunne ikke synkronisere til Firebase.", err);
+  }
+}
+
+async function initRemoteSync() {
+  try {
+    const snap = await getDoc(roomRef);
+    if (snap.exists()) {
+      const remote = snap.data();
+      if (remote && isValidData(remote.data)) {
+        state.sync.lastRemoteUpdatedAt = remote.updatedAt || 0;
+        state.data = remote.data;
+        state.sync.suppressRemoteWrite = true;
+        saveData();
+        state.sync.suppressRemoteWrite = false;
+        renderAll();
+      }
+    } else {
+      await setDoc(roomRef, {
+        data: state.data,
+        updatedAt: Date.now(),
+        updatedBy: state.sync.clientId
+      });
+    }
+    state.sync.ready = true;
+    onSnapshot(roomRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const remote = snapshot.data();
+      if (!remote || !isValidData(remote.data)) return;
+      const updatedAt = remote.updatedAt || 0;
+      if (updatedAt <= state.sync.lastRemoteUpdatedAt) return;
+      state.sync.lastRemoteUpdatedAt = updatedAt;
+      if (remote.updatedBy === state.sync.clientId) return;
+      state.sync.suppressRemoteWrite = true;
+      state.data = remote.data;
+      saveData();
+      state.sync.suppressRemoteWrite = false;
+      renderAll();
+    });
+  } catch (err) {
+    console.error("Firebase synk deaktiveret.", err);
+  }
 }
 
 function byDateTime(a, b) {
@@ -237,7 +335,7 @@ function renderBucket() {
   list.innerHTML = "";
   const items = [...state.data.bucket].sort(byDoneFirst);
   if (items.length === 0) {
-    list.appendChild(emptyItem("Ingen idéer endnu."));
+    list.appendChild(emptyItem("Ingen idÃ©er endnu."));
     return;
   }
   items.forEach((item) => {
@@ -401,7 +499,7 @@ function editShopping(id) {
   const item = state.data.shopping.find((entry) => entry.id === id);
   if (!item) return;
   const label = prompt("Vare", item.label) ?? item.label;
-  const quantity = prompt("Mængde", item.quantity || "") ?? item.quantity;
+  const quantity = prompt("MÃ¦ngde", item.quantity || "") ?? item.quantity;
   const category = prompt("Kategori", item.category || "") ?? item.category;
   item.label = label.trim() || item.label;
   item.quantity = quantity.trim();
@@ -413,7 +511,7 @@ function editShopping(id) {
 function editBucket(id) {
   const item = state.data.bucket.find((entry) => entry.id === id);
   if (!item) return;
-  const label = prompt("Idé", item.label) ?? item.label;
+  const label = prompt("IdÃ©", item.label) ?? item.label;
   const priority = prompt("Prioritet (low/medium/high)", item.priority) ?? item.priority;
   item.label = label.trim() || item.label;
   item.priority = normalizePriority(priority);
@@ -452,7 +550,7 @@ function normalizePriority(value) {
 
 function priorityLabel(priority) {
   if (priority === "low") return "Lav";
-  if (priority === "high") return "Høj";
+  if (priority === "high") return "HÃ¸j";
   return "Medium";
 }
 
@@ -516,3 +614,5 @@ const dateInput = calendarForm.querySelector("input[name=date]");
 dateInput.value = state.ui.selectedDate;
 
 renderAll();
+initRemoteSync();
+
