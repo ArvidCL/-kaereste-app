@@ -27,7 +27,9 @@ const state = {
   ui: {
     year: new Date().getFullYear(),
     month: new Date().getMonth(),
-    selectedDate: todayString()
+    selectedDate: todayString(),
+    calendarFilter: "alle",
+    choresFilter: "alle"
   },
   sync: {
     clientId: getClientId(),
@@ -191,6 +193,18 @@ const choresForm = document.getElementById("choresForm");
 const calendarDayTitle = document.getElementById("calendarDayTitle");
 const calendarGrid = document.getElementById("calendarGrid");
 const calTitle = document.getElementById("calTitle");
+const calendarFilter = document.getElementById("calendarFilter");
+const choresFilter = document.getElementById("choresFilter");
+
+calendarFilter.addEventListener("change", () => {
+  state.ui.calendarFilter = calendarFilter.value;
+  renderCalendarDayList();
+});
+
+choresFilter.addEventListener("change", () => {
+  state.ui.choresFilter = choresFilter.value;
+  renderChores();
+});
 
 calendarForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -355,7 +369,9 @@ function renderBucket() {
 function renderChores() {
   const list = document.getElementById("choresList");
   list.innerHTML = "";
-  const items = [...state.data.chores].sort(byDoneFirst);
+  const items = [...state.data.chores]
+    .filter((item) => state.ui.choresFilter === "alle" || item.assignedTo === state.ui.choresFilter)
+    .sort(byDoneFirst);
   if (items.length === 0) {
     list.appendChild(emptyItem("Ingen pligter endnu."));
     return;
@@ -429,7 +445,10 @@ function renderCalendarDayList() {
   list.innerHTML = "";
   const selected = state.ui.selectedDate;
   calendarDayTitle.textContent = `Planer for ${selected}`;
-  const items = state.data.calendar.filter((item) => item.date === selected).sort(byDateTime);
+  const items = state.data.calendar
+    .filter((item) => item.date === selected)
+    .filter((item) => state.ui.calendarFilter === "alle" || item.person === state.ui.calendarFilter)
+    .sort(byDateTime);
   if (items.length === 0) {
     list.appendChild(emptyItem("Ingen planer for denne dag."));
     return;
@@ -612,6 +631,8 @@ importInput.addEventListener("change", async (event) => {
 
 const dateInput = calendarForm.querySelector("input[name=date]");
 dateInput.value = state.ui.selectedDate;
+calendarFilter.value = state.ui.calendarFilter;
+choresFilter.value = state.ui.choresFilter;
 
 renderAll();
 initRemoteSync();

@@ -112,15 +112,21 @@ body {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  position: sticky;
+  top: 12px;
+  z-index: 5;
+  padding: 8px 0;
+  backdrop-filter: blur(6px);
 }
 
 .tab {
   border: 0;
-  padding: 10px 18px;
+  padding: 12px 20px;
   border-radius: 999px;
   background: #ffffffaa;
   cursor: pointer;
   font-weight: 600;
+  min-height: 44px;
 }
 
 .tab.active {
@@ -136,6 +142,17 @@ body {
   box-shadow: var(--shadow);
   padding: 24px;
   margin-bottom: 20px;
+}
+
+.filters {
+  margin: 6px 0 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.filters select {
+  margin-left: 6px;
 }
 
 .panel.active {
@@ -243,10 +260,11 @@ body {
 
 .form input,
 .form select {
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid #eadfeb;
   font-size: 14px;
+  min-height: 44px;
 }
 
 .btn,
@@ -254,11 +272,12 @@ body {
   background: var(--accent-2);
   color: white;
   border: 0;
-  padding: 10px 16px;
+  padding: 12px 18px;
   border-radius: 12px;
   font-weight: 600;
   cursor: pointer;
   box-shadow: var(--shadow);
+  min-height: 44px;
 }
 
 .file-label {
@@ -288,6 +307,7 @@ body {
   border-radius: 16px;
   background: #ffffffb3;
   border: 1px solid #f2eaf2;
+  min-height: 56px;
 }
 
 .checkbox {
@@ -301,8 +321,8 @@ body {
 }
 
 .check {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 8px;
   border: 2px solid var(--accent);
   display: inline-block;
@@ -354,6 +374,8 @@ body {
   cursor: pointer;
   color: var(--muted);
   font-weight: 600;
+  min-height: 40px;
+  padding: 6px 8px;
 }
 
 .ghost.danger { color: var(--danger); }

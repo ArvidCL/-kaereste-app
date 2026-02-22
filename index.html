@@ -4,6 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Ida &amp; Arvids Kæreste App</title>
+  <meta name="theme-color" content="#ff8fb1" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-180.png" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-32.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -66,6 +70,17 @@
         <input name="notes" placeholder="Noter (valgfrit)" />
         <button class="btn" type="submit">Tilføj</button>
       </form>
+      <div class="filters">
+        <label>
+          Vis:
+          <select id="calendarFilter">
+            <option value="alle" selected>Alle</option>
+            <option value="ida">Ida</option>
+            <option value="arvid">Arvid</option>
+            <option value="begge">Begge</option>
+          </select>
+        </label>
+      </div>
       <div class="panel-head">
         <h3 id="calendarDayTitle">Planer</h3>
       </div>
@@ -118,6 +133,17 @@
         <input name="dueDate" type="date" />
         <button class="btn" type="submit">Tilføj</button>
       </form>
+      <div class="filters">
+        <label>
+          Vis:
+          <select id="choresFilter">
+            <option value="alle" selected>Alle</option>
+            <option value="ida">Ida</option>
+            <option value="arvid">Arvid</option>
+            <option value="begge">Begge</option>
+          </select>
+        </label>
+      </div>
       <ul id="choresList" class="list"></ul>
     </section>
   </main>
