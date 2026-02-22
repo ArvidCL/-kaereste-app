@@ -1,0 +1,144 @@
+﻿<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ida &amp; Arvids Kæreste App</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="bg"></div>
+  <main class="app">
+    <header class="hero">
+      <div>
+        <h1>Arvid &amp; Ida</h1>
+        <p>Jeres cute synk: kalender, indkøb, bucketlist og huslige pligter.</p>
+      </div>
+      <div class="sync">
+        <button id="exportBtn" class="btn">Eksportér</button>
+        <label class="file-label btn">
+          Importér
+          <input id="importInput" type="file" accept="application/json" />
+        </label>
+      </div>
+    </header>
+    <div class="animals-float" aria-hidden="true">
+      <div class="animal float-1" title="Australian Shepherd"></div>
+      <div class="animal float-2" title="Labrador Retriever"></div>
+      <div class="animal float-3" title="Blåmejse"></div>
+      <div class="animal float-4" title="Rødstrupe"></div>
+      <div class="animal float-5" title="Flamingo"></div>
+      <div class="animal float-6" title="Søløve"></div>
+    </div>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="calendar">Kalender</button>
+      <button class="tab" data-tab="shopping">Indkøb</button>
+      <button class="tab" data-tab="bucket">Bucketlist</button>
+      <button class="tab" data-tab="chores">Pligter</button>
+    </nav>
+
+    <section id="tab-calendar" class="panel active">
+      <div class="panel-head">
+        <h2>Kalender</h2>
+        <p>Hold styr på aftaler og hyggelige planer.</p>
+      </div>
+      <div class="calendar">
+        <div class="calendar-head">
+          <button id="calPrev" class="ghost">◀</button>
+          <div id="calTitle" class="cal-title"></div>
+          <button id="calNext" class="ghost">▶</button>
+        </div>
+        <div class="calendar-weekdays">
+          <span>Man</span><span>Tir</span><span>Ons</span><span>Tor</span><span>Fre</span><span>Lør</span><span>Søn</span>
+        </div>
+        <div id="calendarGrid" class="calendar-grid"></div>
+      </div>
+      <form id="calendarForm" class="form">
+        <input name="title" placeholder="Titel" required />
+        <input name="date" type="date" required />
+        <input name="time" type="time" />
+        <select name="person">
+          <option value="arvid">Arvid</option>
+          <option value="ida">Ida</option>
+          <option value="begge" selected>Begge</option>
+        </select>
+        <input name="notes" placeholder="Noter (valgfrit)" />
+        <button class="btn" type="submit">Tilføj</button>
+      </form>
+      <div class="panel-head">
+        <h3 id="calendarDayTitle">Planer</h3>
+      </div>
+      <ul id="calendarDayList" class="list"></ul>
+    </section>
+
+    <section id="tab-shopping" class="panel">
+      <div class="panel-head">
+        <h2>Indkøbsliste</h2>
+        <p>Hurtigt overblik over det, I mangler.</p>
+      </div>
+      <form id="shoppingForm" class="form">
+        <input name="label" placeholder="Vare" required />
+        <input name="quantity" placeholder="Mængde" />
+        <input name="category" placeholder="Kategori" />
+        <button class="btn" type="submit">Tilføj</button>
+      </form>
+      <ul id="shoppingList" class="list"></ul>
+    </section>
+
+    <section id="tab-bucket" class="panel">
+      <div class="panel-head">
+        <h2>Bucketlist</h2>
+        <p>Drømme, oplevelser og små eventyr.</p>
+      </div>
+      <form id="bucketForm" class="form">
+        <input name="label" placeholder="Idé" required />
+        <select name="priority">
+          <option value="low">Lav</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">Høj</option>
+        </select>
+        <button class="btn" type="submit">Tilføj</button>
+      </form>
+      <ul id="bucketList" class="list"></ul>
+    </section>
+
+    <section id="tab-chores" class="panel">
+      <div class="panel-head">
+        <h2>Huslige pligter</h2>
+        <p>Del opgaverne uden bøvl.</p>
+      </div>
+      <form id="choresForm" class="form">
+        <input name="label" placeholder="Opgave" required />
+        <select name="assignedTo">
+          <option value="arvid">Arvid</option>
+          <option value="ida">Ida</option>
+          <option value="begge" selected>Begge</option>
+        </select>
+        <input name="dueDate" type="date" />
+        <button class="btn" type="submit">Tilføj</button>
+      </form>
+      <ul id="choresList" class="list"></ul>
+    </section>
+  </main>
+
+  <template id="listItemTemplate">
+    <li class="list-item">
+      <label class="checkbox">
+        <input type="checkbox" />
+        <span class="check"></span>
+      </label>
+      <div class="item-body">
+        <div class="item-title"></div>
+        <div class="item-meta"></div>
+      </div>
+      <div class="item-actions">
+        <button class="ghost edit">Redigér</button>
+        <button class="ghost danger delete">Slet</button>
+      </div>
+    </li>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
