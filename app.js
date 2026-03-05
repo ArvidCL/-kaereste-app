@@ -1,216 +1,471 @@
-﻿const storageKey = "ida-arvid-home-hub-v2";
+﻿
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-const defaultState = {
-  shopping: [
-    { id: "s1", name: "Mælk", category: "basis", done: false },
-    { id: "s2", name: "Rugbrød", category: "basis", done: false },
-    { id: "s3", name: "Toiletpapir", category: "basis", done: false },
-    { id: "s4", name: "Pasta", category: "other", done: false }
-  ],
-  chores: [
-    { id: "c1", name: "Støvsuge", day: "mon", assignee: "Begge", done: false },
-    { id: "c2", name: "Vaske tøj", day: "thu", assignee: "Arvid", done: false },
-    { id: "c3", name: "Tømme opvasker", day: "sun", assignee: "Ida", done: false }
-  ]
+const firebaseConfig = {
+  apiKey: "AIzaSyAiWPzEintJjv9X6nWSxs05U0giP3IXQ30",
+  authDomain: "kaereste-app.firebaseapp.com",
+  projectId: "kaereste-app",
+  storageBucket: "kaereste-app.firebasestorage.app",
+  messagingSenderId: "193077277457",
+  appId: "1:193077277457:web:7a74712428f26a20fa92b0",
+  measurementId: "G-PCJEPHYFM8"
 };
 
-const dayOrder = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const roomId = "ida-arvid";
+const storageKey = "cute-synk-app-data";
+const weekdays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-const state = loadState();
+const defaultData = {
+  calendar: [],
+  shopping: [],
+  bucket: [],
+  chores: []
+};
 
-const shoppingForm = document.getElementById("shoppingForm");
-const choreForm = document.getElementById("choreForm");
-const basisList = document.getElementById("basisList");
-const otherList = document.getElementById("otherList");
-const clearBought = document.getElementById("clearBought");
-const resetWeek = document.getElementById("resetWeek");
+const state = {
+  data: loadData(),
+  ui: {
+    choresFilter: "alle"
+  },
+  sync: {
+    clientId: getClientId(),
+    lastRemoteUpdatedAt: 0,
+    suppressRemoteWrite: false,
+    ready: false
+  }
+};
 
-const basisCount = document.getElementById("basisCount");
-const otherCount = document.getElementById("otherCount");
-const choreCount = document.getElementById("choreCount");
-const doneCount = document.getElementById("doneCount");
-
-function loadState() {
+function loadData() {
   try {
     const raw = localStorage.getItem(storageKey);
-    if (!raw) return structuredClone(defaultState);
+    if (!raw) return structuredClone(defaultData);
     const parsed = JSON.parse(raw);
-    if (!parsed || !Array.isArray(parsed.shopping) || !Array.isArray(parsed.chores)) {
-      return structuredClone(defaultState);
-    }
-    return parsed;
+    return normalizeData(parsed);
   } catch {
-    return structuredClone(defaultState);
+    return structuredClone(defaultData);
   }
 }
 
-function saveState() {
-  localStorage.setItem(storageKey, JSON.stringify(state));
+function normalizeData(data) {
+  const source = data && typeof data === "object" ? data : defaultData;
+  return {
+    calendar: Array.isArray(source.calendar) ? source.calendar : [],
+    shopping: (Array.isArray(source.shopping) ? source.shopping : []).map((item) => ({
+      id: item.id || uid(),
+      label: String(item.label || "").trim(),
+      quantity: String(item.quantity || "").trim(),
+      kind: normalizeKind(item.kind || item.category),
+      done: Boolean(item.done)
+    })).filter((item) => item.label),
+    bucket: (Array.isArray(source.bucket) ? source.bucket : []).map((item) => ({
+      id: item.id || uid(),
+      label: String(item.label || "").trim(),
+      priority: normalizePriority(item.priority),
+      done: Boolean(item.done)
+    })).filter((item) => item.label),
+    chores: (Array.isArray(source.chores) ? source.chores : []).map((item) => ({
+      id: item.id || uid(),
+      label: String(item.label || "").trim(),
+      assignedTo: normalizePerson(item.assignedTo),
+      weekday: normalizeWeekday(item.weekday || weekdayFromDate(item.dueDate)),
+      done: Boolean(item.done)
+    })).filter((item) => item.label)
+  };
+}
+
+function saveData() {
+  localStorage.setItem(storageKey, JSON.stringify(state.data));
+  scheduleRemoteSave();
 }
 
 function uid() {
-  return Math.random().toString(36).slice(2, 10);
+  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
-function renderShoppingList(listNode, category) {
-  listNode.innerHTML = "";
-  const items = state.shopping
-    .filter((item) => item.category === category)
-    .sort((a, b) => Number(a.done) - Number(b.done) || a.name.localeCompare(b.name, "da"));
-
-  if (items.length === 0) {
-    listNode.innerHTML = '<li class="empty">Ingen varer endnu.</li>';
-    return;
+function getClientId() {
+  const key = "cute-synk-client-id";
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = uid();
+    localStorage.setItem(key, id);
   }
+  return id;
+}
 
-  items.forEach((item) => {
-    const li = document.createElement("li");
-    li.className = `todo-item${item.done ? " done" : ""}`;
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const roomRef = doc(db, "rooms", roomId);
+let remoteSaveTimer = null;
 
-    const check = document.createElement("input");
-    check.type = "checkbox";
-    check.checked = item.done;
-    check.addEventListener("change", () => {
-      item.done = check.checked;
-      saveState();
+function scheduleRemoteSave() {
+  if (!state.sync.ready || state.sync.suppressRemoteWrite) return;
+  if (remoteSaveTimer) clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = setTimeout(pushRemote, 600);
+}
+
+async function pushRemote() {
+  if (!state.sync.ready || state.sync.suppressRemoteWrite) return;
+  const payload = { data: state.data, updatedAt: Date.now(), updatedBy: state.sync.clientId };
+  try {
+    await setDoc(roomRef, payload);
+    state.sync.lastRemoteUpdatedAt = payload.updatedAt;
+  } catch (err) {
+    console.error("Kunne ikke synkronisere til Firebase.", err);
+  }
+}
+
+async function initRemoteSync() {
+  try {
+    const snap = await getDoc(roomRef);
+    if (snap.exists()) {
+      const remote = snap.data();
+      if (remote && remote.data) {
+        state.sync.lastRemoteUpdatedAt = remote.updatedAt || 0;
+        state.data = normalizeData(remote.data);
+        state.sync.suppressRemoteWrite = true;
+        saveData();
+        state.sync.suppressRemoteWrite = false;
+        renderAll();
+      }
+    } else {
+      await setDoc(roomRef, { data: state.data, updatedAt: Date.now(), updatedBy: state.sync.clientId });
+    }
+
+    state.sync.ready = true;
+    onSnapshot(roomRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      const remote = snapshot.data();
+      if (!remote || !remote.data) return;
+      const updatedAt = remote.updatedAt || 0;
+      if (updatedAt <= state.sync.lastRemoteUpdatedAt) return;
+      state.sync.lastRemoteUpdatedAt = updatedAt;
+      if (remote.updatedBy === state.sync.clientId) return;
+
+      state.sync.suppressRemoteWrite = true;
+      state.data = normalizeData(remote.data);
+      saveData();
+      state.sync.suppressRemoteWrite = false;
       renderAll();
     });
+  } catch (err) {
+    console.error("Firebase synk deaktiveret.", err);
+  }
+}
 
-    const label = document.createElement("span");
-    label.textContent = item.name;
+function byDoneFirst(a, b) {
+  return Number(a.done) - Number(b.done);
+}
 
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "icon-btn";
-    remove.textContent = "Fjern";
-    remove.addEventListener("click", () => {
-      state.shopping = state.shopping.filter((entry) => entry.id !== item.id);
-      saveState();
-      renderAll();
-    });
-
-    li.append(check, label, remove);
-    listNode.appendChild(li);
+function resetForm(form) {
+  form.reset();
+  const selects = form.querySelectorAll("select");
+  selects.forEach((select) => {
+    const option = select.querySelector("option[selected]");
+    if (option) select.value = option.value;
   });
 }
+const tabs = document.querySelectorAll(".tab");
+const panels = document.querySelectorAll(".panel");
 
-function choreListFor(day) {
-  return document.getElementById(`chores-${day}`);
-}
-
-function renderChoresDay(day) {
-  const listNode = choreListFor(day);
-  listNode.innerHTML = "";
-
-  const chores = state.chores
-    .filter((chore) => chore.day === day)
-    .sort((a, b) => Number(a.done) - Number(b.done) || a.name.localeCompare(b.name, "da"));
-
-  if (chores.length === 0) {
-    listNode.innerHTML = '<li class="empty">Ingen pligter.</li>';
-    return;
-  }
-
-  chores.forEach((chore) => {
-    const li = document.createElement("li");
-    li.className = `todo-item${chore.done ? " done" : ""}`;
-
-    const check = document.createElement("input");
-    check.type = "checkbox";
-    check.checked = chore.done;
-    check.addEventListener("change", () => {
-      chore.done = check.checked;
-      saveState();
-      renderAll();
-    });
-
-    const label = document.createElement("span");
-    label.textContent = `${chore.name} (${chore.assignee})`;
-
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "icon-btn";
-    remove.textContent = "Fjern";
-    remove.addEventListener("click", () => {
-      state.chores = state.chores.filter((entry) => entry.id !== chore.id);
-      saveState();
-      renderAll();
-    });
-
-    li.append(check, label, remove);
-    listNode.appendChild(li);
+tabs.forEach((tab) => {
+  tab.addEventListener("click", () => {
+    tabs.forEach((t) => t.classList.remove("active"));
+    panels.forEach((p) => p.classList.remove("active"));
+    tab.classList.add("active");
+    document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
   });
-}
+});
 
-function renderStats() {
-  const basisActive = state.shopping.filter((item) => item.category === "basis" && !item.done).length;
-  const otherActive = state.shopping.filter((item) => item.category === "other" && !item.done).length;
-  const choresActive = state.chores.filter((chore) => !chore.done).length;
-  const doneTotal = state.shopping.filter((item) => item.done).length + state.chores.filter((chore) => chore.done).length;
+const shoppingForm = document.getElementById("shoppingForm");
+const bucketForm = document.getElementById("bucketForm");
+const choresForm = document.getElementById("choresForm");
+const choresFilter = document.getElementById("choresFilter");
+const exportBtn = document.getElementById("exportBtn");
+const importInput = document.getElementById("importInput");
 
-  basisCount.textContent = `${basisActive} aktive`;
-  otherCount.textContent = `${otherActive} aktive`;
-  choreCount.textContent = `${choresActive} aktive`;
-  doneCount.textContent = `${doneTotal} total`;
-}
-
-function renderAll() {
-  renderShoppingList(basisList, "basis");
-  renderShoppingList(otherList, "other");
-  dayOrder.forEach(renderChoresDay);
-  renderStats();
-}
+choresFilter.addEventListener("change", () => {
+  state.ui.choresFilter = choresFilter.value;
+  renderChores();
+});
 
 shoppingForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const data = new FormData(shoppingForm);
-  const name = String(data.get("itemName") || "").trim();
-  const category = String(data.get("category") || "basis");
-  if (!name) return;
-
-  state.shopping.push({
+  const formData = new FormData(shoppingForm);
+  const label = String(formData.get("label") || "").trim();
+  if (!label) return;
+  state.data.shopping.push({
     id: uid(),
-    name,
-    category: category === "other" ? "other" : "basis",
+    label,
+    quantity: String(formData.get("quantity") || "").trim(),
+    kind: normalizeKind(formData.get("kind")),
     done: false
   });
-
-  saveState();
-  shoppingForm.reset();
+  saveData();
+  resetForm(shoppingForm);
   renderAll();
 });
 
-choreForm.addEventListener("submit", (event) => {
+bucketForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const data = new FormData(choreForm);
-  const name = String(data.get("choreName") || "").trim();
-  const day = String(data.get("weekday") || "mon");
-  const assignee = String(data.get("assignee") || "Begge");
-  if (!name) return;
+  const formData = new FormData(bucketForm);
+  const label = String(formData.get("label") || "").trim();
+  if (!label) return;
+  state.data.bucket.push({ id: uid(), label, priority: normalizePriority(formData.get("priority")), done: false });
+  saveData();
+  resetForm(bucketForm);
+  renderAll();
+});
 
-  state.chores.push({
+choresForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const formData = new FormData(choresForm);
+  const label = String(formData.get("label") || "").trim();
+  if (!label) return;
+  state.data.chores.push({
     id: uid(),
-    name,
-    day: dayOrder.includes(day) ? day : "mon",
-    assignee,
+    label,
+    assignedTo: normalizePerson(formData.get("assignedTo")),
+    weekday: normalizeWeekday(formData.get("weekday")),
     done: false
   });
-
-  saveState();
-  choreForm.reset();
+  saveData();
+  resetForm(choresForm);
   renderAll();
 });
 
-clearBought.addEventListener("click", () => {
-  state.shopping = state.shopping.filter((item) => !item.done);
-  saveState();
+function renderAll() {
+  renderShopping();
+  renderBucket();
+  renderChores();
+}
+
+function createListItem({ title, meta, done, onToggle, onEdit, onDelete }) {
+  const template = document.getElementById("listItemTemplate");
+  const node = template.content.firstElementChild.cloneNode(true);
+  node.querySelector(".item-title").textContent = title;
+  const metaEl = node.querySelector(".item-meta");
+  meta.forEach((entry) => metaEl.appendChild(entry));
+  const checkbox = node.querySelector("input[type=checkbox]");
+  checkbox.checked = Boolean(done);
+  checkbox.addEventListener("change", onToggle);
+  node.querySelector(".edit").addEventListener("click", onEdit);
+  node.querySelector(".delete").addEventListener("click", onDelete);
+  return node;
+}
+
+function makeBadge(text, className) {
+  const span = document.createElement("span");
+  span.className = `badge ${className || ""}`.trim();
+  span.textContent = text;
+  return span;
+}
+
+function emptyItem(text) {
+  const li = document.createElement("li");
+  li.className = "list-item";
+  li.textContent = text;
+  return li;
+}
+function renderShopping() {
+  renderShoppingList("basis", "shoppingListBasis", "Ingen basisvarer endnu.");
+  renderShoppingList("other", "shoppingListOther", "Ingen andre ting endnu.");
+}
+
+function renderShoppingList(kind, listId, emptyText) {
+  const list = document.getElementById(listId);
+  list.innerHTML = "";
+  const items = state.data.shopping.filter((item) => normalizeKind(item.kind) === kind).sort(byDoneFirst);
+  if (items.length === 0) {
+    list.appendChild(emptyItem(emptyText));
+    return;
+  }
+  items.forEach((item) => {
+    const meta = [];
+    if (item.quantity) meta.push(makeBadge(item.quantity));
+    const node = createListItem({
+      title: item.label,
+      meta,
+      done: item.done,
+      onToggle: () => toggleDone("shopping", item.id),
+      onEdit: () => editShopping(item.id),
+      onDelete: () => deleteItem("shopping", item.id)
+    });
+    list.appendChild(node);
+  });
+}
+
+function renderBucket() {
+  const list = document.getElementById("bucketList");
+  list.innerHTML = "";
+  const items = [...state.data.bucket].sort(byDoneFirst);
+  if (items.length === 0) {
+    list.appendChild(emptyItem("Ingen idéer endnu."));
+    return;
+  }
+  items.forEach((item) => {
+    const node = createListItem({
+      title: item.label,
+      meta: [makeBadge(priorityLabel(item.priority), `priority-${item.priority}`)],
+      done: item.done,
+      onToggle: () => toggleDone("bucket", item.id),
+      onEdit: () => editBucket(item.id),
+      onDelete: () => deleteItem("bucket", item.id)
+    });
+    list.appendChild(node);
+  });
+}
+
+function renderChores() {
+  weekdays.forEach((day) => {
+    const list = document.getElementById(`chores-${day}`);
+    list.innerHTML = "";
+    const items = state.data.chores
+      .filter((item) => normalizeWeekday(item.weekday) === day)
+      .filter((item) => state.ui.choresFilter === "alle" || item.assignedTo === state.ui.choresFilter)
+      .sort(byDoneFirst);
+
+    if (items.length === 0) {
+      list.appendChild(emptyItem("Ingen pligter."));
+      return;
+    }
+
+    items.forEach((item) => {
+      const node = createListItem({
+        title: item.label,
+        meta: [makeBadge(personLabel(item.assignedTo), "person")],
+        done: item.done,
+        onToggle: () => toggleDone("chores", item.id),
+        onEdit: () => editChore(item.id),
+        onDelete: () => deleteItem("chores", item.id)
+      });
+      list.appendChild(node);
+    });
+  });
+}
+
+function toggleDone(type, id) {
+  const item = state.data[type].find((entry) => entry.id === id);
+  if (!item) return;
+  item.done = !item.done;
+  saveData();
   renderAll();
+}
+
+function deleteItem(type, id) {
+  state.data[type] = state.data[type].filter((entry) => entry.id !== id);
+  saveData();
+  renderAll();
+}
+
+function editShopping(id) {
+  const item = state.data.shopping.find((entry) => entry.id === id);
+  if (!item) return;
+  const label = prompt("Vare", item.label) ?? item.label;
+  const quantity = prompt("Mængde", item.quantity || "") ?? item.quantity;
+  const kind = prompt("Liste (basis/other)", item.kind || "basis") ?? item.kind;
+  item.label = String(label).trim() || item.label;
+  item.quantity = String(quantity).trim();
+  item.kind = normalizeKind(kind);
+  saveData();
+  renderAll();
+}
+
+function editBucket(id) {
+  const item = state.data.bucket.find((entry) => entry.id === id);
+  if (!item) return;
+  const label = prompt("Idé", item.label) ?? item.label;
+  const priority = prompt("Prioritet (low/medium/high)", item.priority) ?? item.priority;
+  item.label = String(label).trim() || item.label;
+  item.priority = normalizePriority(priority);
+  saveData();
+  renderAll();
+}
+function editChore(id) {
+  const item = state.data.chores.find((entry) => entry.id === id);
+  if (!item) return;
+  const label = prompt("Opgave", item.label) ?? item.label;
+  const assignedTo = prompt("Hvem? (arvid/ida/begge)", item.assignedTo) ?? item.assignedTo;
+  const weekday = prompt("Ugedag (mon/tue/wed/thu/fri/sat/sun)", item.weekday || "mon") ?? item.weekday;
+  item.label = String(label).trim() || item.label;
+  item.assignedTo = normalizePerson(assignedTo);
+  item.weekday = normalizeWeekday(weekday);
+  saveData();
+  renderAll();
+}
+
+function normalizePerson(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized === "arvid" || normalized === "ida" || normalized === "begge") return normalized;
+  return "begge";
+}
+
+function normalizePriority(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized === "low" || normalized === "medium" || normalized === "high") return normalized;
+  return "medium";
+}
+
+function normalizeKind(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized === "other" || normalized === "andre") return "other";
+  return "basis";
+}
+
+function normalizeWeekday(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (weekdays.includes(normalized)) return normalized;
+  return "mon";
+}
+
+function weekdayFromDate(value) {
+  if (!value) return "mon";
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "mon";
+  return ["sun", "mon", "tue", "wed", "thu", "fri", "sat"][date.getDay()] || "mon";
+}
+
+function personLabel(value) {
+  if (value === "ida") return "Ida";
+  if (value === "arvid") return "Arvid";
+  return "Begge";
+}
+
+function priorityLabel(priority) {
+  if (priority === "low") return "Lav";
+  if (priority === "high") return "Høj";
+  return "Medium";
+}
+
+exportBtn.addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(state.data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "cute-synk-data.json";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 });
 
-resetWeek.addEventListener("click", () => {
-  state.chores = state.chores.map((chore) => ({ ...chore, done: false }));
-  saveState();
-  renderAll();
+importInput.addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    state.data = normalizeData(parsed);
+    saveData();
+    renderAll();
+    alert("Data importeret!");
+  } catch {
+    alert("Kunne ikke importere filen.");
+  } finally {
+    importInput.value = "";
+  }
 });
 
+choresFilter.value = state.ui.choresFilter;
 renderAll();
+initRemoteSync();
