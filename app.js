@@ -1,639 +1,216 @@
-﻿import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+﻿const storageKey = "ida-arvid-home-hub-v2";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyAiWPzEintJjv9X6nWSxs05U0giP3IXQ30",
-  authDomain: "kaereste-app.firebaseapp.com",
-  projectId: "kaereste-app",
-  storageBucket: "kaereste-app.firebasestorage.app",
-  messagingSenderId: "193077277457",
-  appId: "1:193077277457:web:7a74712428f26a20fa92b0",
-  measurementId: "G-PCJEPHYFM8"
+const defaultState = {
+  shopping: [
+    { id: "s1", name: "Mælk", category: "basis", done: false },
+    { id: "s2", name: "Rugbrød", category: "basis", done: false },
+    { id: "s3", name: "Toiletpapir", category: "basis", done: false },
+    { id: "s4", name: "Pasta", category: "other", done: false }
+  ],
+  chores: [
+    { id: "c1", name: "Støvsuge", day: "mon", assignee: "Begge", done: false },
+    { id: "c2", name: "Vaske tøj", day: "thu", assignee: "Arvid", done: false },
+    { id: "c3", name: "Tømme opvasker", day: "sun", assignee: "Ida", done: false }
+  ]
 };
 
-const roomId = "ida-arvid";
+const dayOrder = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-const storageKey = "cute-synk-app-data";
+const state = loadState();
 
-const defaultData = {
-  calendar: [],
-  shopping: [],
-  bucket: [],
-  chores: []
-};
+const shoppingForm = document.getElementById("shoppingForm");
+const choreForm = document.getElementById("choreForm");
+const basisList = document.getElementById("basisList");
+const otherList = document.getElementById("otherList");
+const clearBought = document.getElementById("clearBought");
+const resetWeek = document.getElementById("resetWeek");
 
-const state = {
-  data: loadData(),
-  ui: {
-    year: new Date().getFullYear(),
-    month: new Date().getMonth(),
-    selectedDate: todayString(),
-    calendarFilter: "alle",
-    choresFilter: "alle"
-  },
-  sync: {
-    clientId: getClientId(),
-    lastRemoteUpdatedAt: 0,
-    suppressRemoteWrite: false,
-    ready: false
-  }
-};
+const basisCount = document.getElementById("basisCount");
+const otherCount = document.getElementById("otherCount");
+const choreCount = document.getElementById("choreCount");
+const doneCount = document.getElementById("doneCount");
 
-function loadData() {
+function loadState() {
   try {
     const raw = localStorage.getItem(storageKey);
-    if (!raw) return structuredClone(defaultData);
+    if (!raw) return structuredClone(defaultState);
     const parsed = JSON.parse(raw);
-    if (!isValidData(parsed)) return structuredClone(defaultData);
+    if (!parsed || !Array.isArray(parsed.shopping) || !Array.isArray(parsed.chores)) {
+      return structuredClone(defaultState);
+    }
     return parsed;
   } catch {
-    return structuredClone(defaultData);
+    return structuredClone(defaultState);
   }
 }
 
-function saveData() {
-  localStorage.setItem(storageKey, JSON.stringify(state.data));
-  scheduleRemoteSave();
-}
-
-function isValidData(data) {
-  return data &&
-    Array.isArray(data.calendar) &&
-    Array.isArray(data.shopping) &&
-    Array.isArray(data.bucket) &&
-    Array.isArray(data.chores);
+function saveState() {
+  localStorage.setItem(storageKey, JSON.stringify(state));
 }
 
 function uid() {
-  return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+  return Math.random().toString(36).slice(2, 10);
 }
 
-function getClientId() {
-  const key = "cute-synk-client-id";
-  let id = localStorage.getItem(key);
-  if (!id) {
-    id = uid();
-    localStorage.setItem(key, id);
+function renderShoppingList(listNode, category) {
+  listNode.innerHTML = "";
+  const items = state.shopping
+    .filter((item) => item.category === category)
+    .sort((a, b) => Number(a.done) - Number(b.done) || a.name.localeCompare(b.name, "da"));
+
+  if (items.length === 0) {
+    listNode.innerHTML = '<li class="empty">Ingen varer endnu.</li>';
+    return;
   }
-  return id;
-}
 
-function formatLocalDate(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
+  items.forEach((item) => {
+    const li = document.createElement("li");
+    li.className = `todo-item${item.done ? " done" : ""}`;
 
-function todayString() {
-  return formatLocalDate(new Date());
-}
-
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const roomRef = doc(db, "rooms", roomId);
-let remoteSaveTimer = null;
-
-function scheduleRemoteSave() {
-  if (!state.sync.ready || state.sync.suppressRemoteWrite) return;
-  if (remoteSaveTimer) clearTimeout(remoteSaveTimer);
-  remoteSaveTimer = setTimeout(pushRemote, 600);
-}
-
-async function pushRemote() {
-  if (!state.sync.ready || state.sync.suppressRemoteWrite) return;
-  const payload = {
-    data: state.data,
-    updatedAt: Date.now(),
-    updatedBy: state.sync.clientId
-  };
-  try {
-    await setDoc(roomRef, payload);
-    state.sync.lastRemoteUpdatedAt = payload.updatedAt;
-  } catch (err) {
-    console.error("Kunne ikke synkronisere til Firebase.", err);
-  }
-}
-
-async function initRemoteSync() {
-  try {
-    const snap = await getDoc(roomRef);
-    if (snap.exists()) {
-      const remote = snap.data();
-      if (remote && isValidData(remote.data)) {
-        state.sync.lastRemoteUpdatedAt = remote.updatedAt || 0;
-        state.data = remote.data;
-        state.sync.suppressRemoteWrite = true;
-        saveData();
-        state.sync.suppressRemoteWrite = false;
-        renderAll();
-      }
-    } else {
-      await setDoc(roomRef, {
-        data: state.data,
-        updatedAt: Date.now(),
-        updatedBy: state.sync.clientId
-      });
-    }
-    state.sync.ready = true;
-    onSnapshot(roomRef, (snapshot) => {
-      if (!snapshot.exists()) return;
-      const remote = snapshot.data();
-      if (!remote || !isValidData(remote.data)) return;
-      const updatedAt = remote.updatedAt || 0;
-      if (updatedAt <= state.sync.lastRemoteUpdatedAt) return;
-      state.sync.lastRemoteUpdatedAt = updatedAt;
-      if (remote.updatedBy === state.sync.clientId) return;
-      state.sync.suppressRemoteWrite = true;
-      state.data = remote.data;
-      saveData();
-      state.sync.suppressRemoteWrite = false;
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.checked = item.done;
+    check.addEventListener("change", () => {
+      item.done = check.checked;
+      saveState();
       renderAll();
     });
-  } catch (err) {
-    console.error("Firebase synk deaktiveret.", err);
+
+    const label = document.createElement("span");
+    label.textContent = item.name;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-btn";
+    remove.textContent = "Fjern";
+    remove.addEventListener("click", () => {
+      state.shopping = state.shopping.filter((entry) => entry.id !== item.id);
+      saveState();
+      renderAll();
+    });
+
+    li.append(check, label, remove);
+    listNode.appendChild(li);
+  });
+}
+
+function choreListFor(day) {
+  return document.getElementById(`chores-${day}`);
+}
+
+function renderChoresDay(day) {
+  const listNode = choreListFor(day);
+  listNode.innerHTML = "";
+
+  const chores = state.chores
+    .filter((chore) => chore.day === day)
+    .sort((a, b) => Number(a.done) - Number(b.done) || a.name.localeCompare(b.name, "da"));
+
+  if (chores.length === 0) {
+    listNode.innerHTML = '<li class="empty">Ingen pligter.</li>';
+    return;
   }
-}
 
-function byDateTime(a, b) {
-  const aKey = `${a.date || ""} ${a.time || ""}`.trim();
-  const bKey = `${b.date || ""} ${b.time || ""}`.trim();
-  return aKey.localeCompare(bKey);
-}
+  chores.forEach((chore) => {
+    const li = document.createElement("li");
+    li.className = `todo-item${chore.done ? " done" : ""}`;
 
-function byDoneFirst(a, b) {
-  return Number(a.done) - Number(b.done);
-}
+    const check = document.createElement("input");
+    check.type = "checkbox";
+    check.checked = chore.done;
+    check.addEventListener("change", () => {
+      chore.done = check.checked;
+      saveState();
+      renderAll();
+    });
 
-function resetForm(form) {
-  form.reset();
-  const selects = form.querySelectorAll("select");
-  selects.forEach((select) => {
-    const option = select.querySelector("option[selected]");
-    if (option) select.value = option.value;
+    const label = document.createElement("span");
+    label.textContent = `${chore.name} (${chore.assignee})`;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-btn";
+    remove.textContent = "Fjern";
+    remove.addEventListener("click", () => {
+      state.chores = state.chores.filter((entry) => entry.id !== chore.id);
+      saveState();
+      renderAll();
+    });
+
+    li.append(check, label, remove);
+    listNode.appendChild(li);
   });
 }
 
-const tabs = document.querySelectorAll(".tab");
-const panels = document.querySelectorAll(".panel");
+function renderStats() {
+  const basisActive = state.shopping.filter((item) => item.category === "basis" && !item.done).length;
+  const otherActive = state.shopping.filter((item) => item.category === "other" && !item.done).length;
+  const choresActive = state.chores.filter((chore) => !chore.done).length;
+  const doneTotal = state.shopping.filter((item) => item.done).length + state.chores.filter((chore) => chore.done).length;
 
-tabs.forEach((tab) => {
-  tab.addEventListener("click", () => {
-    tabs.forEach((t) => t.classList.remove("active"));
-    panels.forEach((p) => p.classList.remove("active"));
-    tab.classList.add("active");
-    document.getElementById(`tab-${tab.dataset.tab}`).classList.add("active");
-  });
-});
+  basisCount.textContent = `${basisActive} aktive`;
+  otherCount.textContent = `${otherActive} aktive`;
+  choreCount.textContent = `${choresActive} aktive`;
+  doneCount.textContent = `${doneTotal} total`;
+}
 
-const calendarForm = document.getElementById("calendarForm");
-const shoppingForm = document.getElementById("shoppingForm");
-const bucketForm = document.getElementById("bucketForm");
-const choresForm = document.getElementById("choresForm");
-const calendarDayTitle = document.getElementById("calendarDayTitle");
-const calendarGrid = document.getElementById("calendarGrid");
-const calTitle = document.getElementById("calTitle");
-const calendarFilter = document.getElementById("calendarFilter");
-const choresFilter = document.getElementById("choresFilter");
-
-calendarFilter.addEventListener("change", () => {
-  state.ui.calendarFilter = calendarFilter.value;
-  renderCalendarDayList();
-});
-
-choresFilter.addEventListener("change", () => {
-  state.ui.choresFilter = choresFilter.value;
-  renderChores();
-});
-
-calendarForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const formData = new FormData(calendarForm);
-  const title = formData.get("title").trim();
-  const date = formData.get("date");
-  if (!title || !date) return;
-  state.data.calendar.push({
-    id: uid(),
-    title,
-    date,
-    time: formData.get("time") || "",
-    person: formData.get("person") || "begge",
-    notes: formData.get("notes").trim()
-  });
-  saveData();
-  resetForm(calendarForm);
-  state.ui.selectedDate = date;
-  const [y, m] = date.split("-").map(Number);
-  if (!Number.isNaN(y) && !Number.isNaN(m)) {
-    state.ui.year = y;
-    state.ui.month = m - 1;
-  }
-  renderAll();
-});
+function renderAll() {
+  renderShoppingList(basisList, "basis");
+  renderShoppingList(otherList, "other");
+  dayOrder.forEach(renderChoresDay);
+  renderStats();
+}
 
 shoppingForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const formData = new FormData(shoppingForm);
-  const label = formData.get("label").trim();
-  if (!label) return;
-  state.data.shopping.push({
+  const data = new FormData(shoppingForm);
+  const name = String(data.get("itemName") || "").trim();
+  const category = String(data.get("category") || "basis");
+  if (!name) return;
+
+  state.shopping.push({
     id: uid(),
-    label,
-    quantity: formData.get("quantity").trim(),
-    category: formData.get("category").trim(),
+    name,
+    category: category === "other" ? "other" : "basis",
     done: false
   });
-  saveData();
-  resetForm(shoppingForm);
+
+  saveState();
+  shoppingForm.reset();
   renderAll();
 });
 
-bucketForm.addEventListener("submit", (event) => {
+choreForm.addEventListener("submit", (event) => {
   event.preventDefault();
-  const formData = new FormData(bucketForm);
-  const label = formData.get("label").trim();
-  if (!label) return;
-  state.data.bucket.push({
+  const data = new FormData(choreForm);
+  const name = String(data.get("choreName") || "").trim();
+  const day = String(data.get("weekday") || "mon");
+  const assignee = String(data.get("assignee") || "Begge");
+  if (!name) return;
+
+  state.chores.push({
     id: uid(),
-    label,
-    priority: formData.get("priority") || "medium",
+    name,
+    day: dayOrder.includes(day) ? day : "mon",
+    assignee,
     done: false
   });
-  saveData();
-  resetForm(bucketForm);
+
+  saveState();
+  choreForm.reset();
   renderAll();
 });
 
-choresForm.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const formData = new FormData(choresForm);
-  const label = formData.get("label").trim();
-  if (!label) return;
-  state.data.chores.push({
-    id: uid(),
-    label,
-    assignedTo: formData.get("assignedTo") || "begge",
-    dueDate: formData.get("dueDate"),
-    done: false
-  });
-  saveData();
-  resetForm(choresForm);
+clearBought.addEventListener("click", () => {
+  state.shopping = state.shopping.filter((item) => !item.done);
+  saveState();
   renderAll();
 });
 
-function renderAll() {
-  renderCalendar();
-  renderShopping();
-  renderBucket();
-  renderChores();
-}
-
-function createListItem({ title, meta, done, onToggle, onEdit, onDelete }) {
-  const template = document.getElementById("listItemTemplate");
-  const node = template.content.firstElementChild.cloneNode(true);
-  const checkbox = node.querySelector("input[type=checkbox]");
-  const titleEl = node.querySelector(".item-title");
-  const metaEl = node.querySelector(".item-meta");
-  const editBtn = node.querySelector(".edit");
-  const deleteBtn = node.querySelector(".delete");
-
-  titleEl.textContent = title;
-  meta.forEach((entry) => metaEl.appendChild(entry));
-  checkbox.checked = Boolean(done);
-
-  checkbox.addEventListener("change", onToggle);
-  editBtn.addEventListener("click", onEdit);
-  deleteBtn.addEventListener("click", onDelete);
-
-  return node;
-}
-
-function makeBadge(text, className) {
-  const span = document.createElement("span");
-  span.className = `badge ${className || ""}`.trim();
-  span.textContent = text;
-  return span;
-}
-
-function renderCalendar() {
-  renderCalendarGrid();
-  renderCalendarDayList();
-}
-
-function renderShopping() {
-  const list = document.getElementById("shoppingList");
-  list.innerHTML = "";
-  const items = [...state.data.shopping].sort(byDoneFirst);
-  if (items.length === 0) {
-    list.appendChild(emptyItem("Ingen varer endnu."));
-    return;
-  }
-  items.forEach((item) => {
-    const meta = [];
-    if (item.quantity) meta.push(makeBadge(item.quantity));
-    if (item.category) meta.push(makeBadge(item.category));
-    const node = createListItem({
-      title: item.label,
-      meta,
-      done: item.done,
-      onToggle: () => toggleDone("shopping", item.id),
-      onEdit: () => editShopping(item.id),
-      onDelete: () => deleteItem("shopping", item.id)
-    });
-    list.appendChild(node);
-  });
-}
-
-function renderBucket() {
-  const list = document.getElementById("bucketList");
-  list.innerHTML = "";
-  const items = [...state.data.bucket].sort(byDoneFirst);
-  if (items.length === 0) {
-    list.appendChild(emptyItem("Ingen idÃ©er endnu."));
-    return;
-  }
-  items.forEach((item) => {
-    const meta = [makeBadge(priorityLabel(item.priority), `priority-${item.priority}`)];
-    const node = createListItem({
-      title: item.label,
-      meta,
-      done: item.done,
-      onToggle: () => toggleDone("bucket", item.id),
-      onEdit: () => editBucket(item.id),
-      onDelete: () => deleteItem("bucket", item.id)
-    });
-    list.appendChild(node);
-  });
-}
-
-function renderChores() {
-  const list = document.getElementById("choresList");
-  list.innerHTML = "";
-  const items = [...state.data.chores]
-    .filter((item) => state.ui.choresFilter === "alle" || item.assignedTo === state.ui.choresFilter)
-    .sort(byDoneFirst);
-  if (items.length === 0) {
-    list.appendChild(emptyItem("Ingen pligter endnu."));
-    return;
-  }
-  items.forEach((item) => {
-    const meta = [makeBadge(item.assignedTo, "person")];
-    if (item.dueDate) meta.push(makeBadge(item.dueDate, "due"));
-    const node = createListItem({
-      title: item.label,
-      meta,
-      done: item.done,
-      onToggle: () => toggleDone("chores", item.id),
-      onEdit: () => editChore(item.id),
-      onDelete: () => deleteItem("chores", item.id)
-    });
-    list.appendChild(node);
-  });
-}
-
-function emptyItem(text) {
-  const li = document.createElement("li");
-  li.className = "list-item";
-  li.textContent = text;
-  return li;
-}
-
-function renderCalendarGrid() {
-  const { year, month } = state.ui;
-  const monthStart = new Date(year, month, 1);
-  const monthEnd = new Date(year, month + 1, 0);
-  const daysInMonth = monthEnd.getDate();
-  const startWeekday = (monthStart.getDay() + 6) % 7; // monday=0
-  const totalCells = Math.ceil((startWeekday + daysInMonth) / 7) * 7;
-
-  const monthName = monthStart.toLocaleDateString("da-DK", { month: "long", year: "numeric" });
-  calTitle.textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
-  calendarGrid.innerHTML = "";
-
-  for (let i = 0; i < totalCells; i += 1) {
-    const dayNum = i - startWeekday + 1;
-    const cellDate = new Date(year, month, dayNum);
-    const isCurrentMonth = dayNum >= 1 && dayNum <= daysInMonth;
-    const iso = formatLocalDate(cellDate);
-    const dayEvents = state.data.calendar.filter((item) => item.date === iso);
-
-    const cell = document.createElement("div");
-    cell.className = `cal-day ${isCurrentMonth ? "" : "muted"} ${iso === state.ui.selectedDate ? "selected" : ""}`.trim();
-    cell.dataset.date = iso;
-
-    const num = document.createElement("div");
-    num.className = "num";
-    num.textContent = String(cellDate.getDate());
-
-    const dots = document.createElement("div");
-    dots.className = "dots";
-    dayEvents.slice(0, 3).forEach((_, idx) => {
-      const dot = document.createElement("span");
-      dot.className = `dot ${idx % 2 === 0 ? "" : "alt"}`.trim();
-      dots.appendChild(dot);
-    });
-
-    cell.appendChild(num);
-    cell.appendChild(dots);
-    cell.addEventListener("click", () => selectDate(iso));
-    calendarGrid.appendChild(cell);
-  }
-}
-
-function renderCalendarDayList() {
-  const list = document.getElementById("calendarDayList");
-  list.innerHTML = "";
-  const selected = state.ui.selectedDate;
-  calendarDayTitle.textContent = `Planer for ${selected}`;
-  const items = state.data.calendar
-    .filter((item) => item.date === selected)
-    .filter((item) => state.ui.calendarFilter === "alle" || item.person === state.ui.calendarFilter)
-    .sort(byDateTime);
-  if (items.length === 0) {
-    list.appendChild(emptyItem("Ingen planer for denne dag."));
-    return;
-  }
-  items.forEach((item) => {
-    const meta = [];
-    if (item.time) meta.push(makeBadge(item.time));
-    meta.push(makeBadge(item.person, "person"));
-    if (item.notes) meta.push(makeBadge(item.notes));
-    const node = createListItem({
-      title: item.title,
-      meta,
-      done: false,
-      onToggle: () => {},
-      onEdit: () => editCalendar(item.id),
-      onDelete: () => deleteItem("calendar", item.id)
-    });
-    node.querySelector(".checkbox").style.visibility = "hidden";
-    list.appendChild(node);
-  });
-}
-
-function selectDate(iso) {
-  state.ui.selectedDate = iso;
-  const [y, m] = iso.split("-").map(Number);
-  if (!Number.isNaN(y) && !Number.isNaN(m)) {
-    state.ui.year = y;
-    state.ui.month = m - 1;
-  }
-  const dateInput = calendarForm.querySelector("input[name=date]");
-  dateInput.value = iso;
-  renderCalendar();
-}
-
-function toggleDone(type, id) {
-  const item = state.data[type].find((entry) => entry.id === id);
-  if (!item) return;
-  item.done = !item.done;
-  saveData();
+resetWeek.addEventListener("click", () => {
+  state.chores = state.chores.map((chore) => ({ ...chore, done: false }));
+  saveState();
   renderAll();
-}
-
-function deleteItem(type, id) {
-  state.data[type] = state.data[type].filter((entry) => entry.id !== id);
-  saveData();
-  renderAll();
-}
-
-function editCalendar(id) {
-  const item = state.data.calendar.find((entry) => entry.id === id);
-  if (!item) return;
-  const title = prompt("Titel", item.title) ?? item.title;
-  const date = prompt("Dato (YYYY-MM-DD)", item.date) ?? item.date;
-  const time = prompt("Tid (HH:MM)", item.time || "") ?? item.time;
-  const person = prompt("Hvem? (arvid/ida/begge)", item.person) ?? item.person;
-  const notes = prompt("Noter", item.notes || "") ?? item.notes;
-  item.title = title.trim() || item.title;
-  item.date = date || item.date;
-  item.time = time || "";
-  item.person = normalizePerson(person);
-  item.notes = notes.trim();
-  saveData();
-  renderAll();
-}
-
-function editShopping(id) {
-  const item = state.data.shopping.find((entry) => entry.id === id);
-  if (!item) return;
-  const label = prompt("Vare", item.label) ?? item.label;
-  const quantity = prompt("MÃ¦ngde", item.quantity || "") ?? item.quantity;
-  const category = prompt("Kategori", item.category || "") ?? item.category;
-  item.label = label.trim() || item.label;
-  item.quantity = quantity.trim();
-  item.category = category.trim();
-  saveData();
-  renderAll();
-}
-
-function editBucket(id) {
-  const item = state.data.bucket.find((entry) => entry.id === id);
-  if (!item) return;
-  const label = prompt("IdÃ©", item.label) ?? item.label;
-  const priority = prompt("Prioritet (low/medium/high)", item.priority) ?? item.priority;
-  item.label = label.trim() || item.label;
-  item.priority = normalizePriority(priority);
-  saveData();
-  renderAll();
-}
-
-function editChore(id) {
-  const item = state.data.chores.find((entry) => entry.id === id);
-  if (!item) return;
-  const label = prompt("Opgave", item.label) ?? item.label;
-  const assignedTo = prompt("Hvem? (arvid/ida/begge)", item.assignedTo) ?? item.assignedTo;
-  const dueDate = prompt("Forfaldsdato (YYYY-MM-DD)", item.dueDate || "") ?? item.dueDate;
-  item.label = label.trim() || item.label;
-  item.assignedTo = normalizePerson(assignedTo);
-  item.dueDate = dueDate || "";
-  saveData();
-  renderAll();
-}
-
-function normalizePerson(value) {
-  const normalized = (value || "").toLowerCase();
-  if (normalized === "arvid" || normalized === "ida" || normalized === "begge") {
-    return normalized;
-  }
-  return "begge";
-}
-
-function normalizePriority(value) {
-  const normalized = (value || "").toLowerCase();
-  if (normalized === "low" || normalized === "medium" || normalized === "high") {
-    return normalized;
-  }
-  return "medium";
-}
-
-function priorityLabel(priority) {
-  if (priority === "low") return "Lav";
-  if (priority === "high") return "HÃ¸j";
-  return "Medium";
-}
-
-const exportBtn = document.getElementById("exportBtn");
-const importInput = document.getElementById("importInput");
-const calPrev = document.getElementById("calPrev");
-const calNext = document.getElementById("calNext");
-
-calPrev.addEventListener("click", () => {
-  state.ui.month -= 1;
-  if (state.ui.month < 0) {
-    state.ui.month = 11;
-    state.ui.year -= 1;
-  }
-  renderCalendar();
 });
-
-calNext.addEventListener("click", () => {
-  state.ui.month += 1;
-  if (state.ui.month > 11) {
-    state.ui.month = 0;
-    state.ui.year += 1;
-  }
-  renderCalendar();
-});
-
-exportBtn.addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(state.data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "cute-synk-data.json";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-});
-
-importInput.addEventListener("change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  try {
-    const text = await file.text();
-    const parsed = JSON.parse(text);
-    if (!isValidData(parsed)) {
-      alert("Dataformatet er forkert.");
-      return;
-    }
-    state.data = parsed;
-    saveData();
-    renderAll();
-    alert("Data importeret!");
-  } catch {
-    alert("Kunne ikke importere filen.");
-  } finally {
-    importInput.value = "";
-  }
-});
-
-const dateInput = calendarForm.querySelector("input[name=date]");
-dateInput.value = state.ui.selectedDate;
-calendarFilter.value = state.ui.calendarFilter;
-choresFilter.value = state.ui.choresFilter;
 
 renderAll();
-initRemoteSync();
-

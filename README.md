@@ -1,12 +1,13 @@
 ﻿# Kæreste App
 
-Cute webapp til Arvid & Ida med kalender, indkøbsliste, bucketlist og huslige pligter.
+Praktisk webapp til Ida & Arvid med:
+- organiseret indkøbsliste i to grupper (basisvarer + andre ting)
+- ugeplan for huslige pligter med tilføjelse, afkrydsning og nulstilling
+
+Kalender-funktionen er fjernet, da i bruger iPhone-kalenderen.
 
 ## Kør lokalt
-Åbn `index.html` i din browser.
+Åbn `index.html` i browseren.
 
-## Synk (Firebase)
-Appen synker via Firebase Firestore i rummet `ida-arvid`. Sørg for at Firestore er oprettet (test mode er ok til test).
-
-## Deploy
-Upload `deploy.zip` til Netlify Drop eller brug GitHub + Netlify import.
+## Data
+Lister og pligter gemmes lokalt i browserens localStorage.

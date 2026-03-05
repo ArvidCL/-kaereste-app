@@ -3,167 +3,118 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Ida &amp; Arvids Kæreste App</title>
-  <meta name="theme-color" content="#ff8fb1" />
+  <title>Ida & Arvid Hjemmehub</title>
+  <meta name="theme-color" content="#f7c59f" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="assets/icons/icon-180.png" />
   <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-32.png" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="bg"></div>
+  <div class="backdrop" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+    <div class="grid"></div>
+  </div>
+
   <main class="app">
     <header class="hero">
-      <div>
-        <h1>Arvid &amp; Ida</h1>
-        <p>Jeres cute synk: kalender, indkøb, bucketlist og huslige pligter.</p>
+      <div class="hero-text">
+        <p class="eyebrow">Til Ida fra Arvid</p>
+        <h1>Hjemmehub til indkøb og pligter.</h1>
+        <p class="lead">Kalenderen er væk herfra, så siden fokuserer på det praktiske: organiseret indkøbsliste og ugentlig pligtplan.</p>
+        <div class="hero-actions">
+          <button class="btn" id="clearBought">Fjern købte varer</button>
+          <button class="btn ghost" id="resetWeek">Nulstil uge-pligter</button>
+        </div>
       </div>
-      <div class="sync">
-        <button id="exportBtn" class="btn">Eksportér</button>
-        <label class="file-label btn">
-          Importér
-          <input id="importInput" type="file" accept="application/json" />
-        </label>
+      <div class="hero-card">
+        <h2>Overblik lige nu</h2>
+        <ul>
+          <li><span>Basisvarer:</span> <strong id="basisCount">0 aktive</strong></li>
+          <li><span>Andre varer:</span> <strong id="otherCount">0 aktive</strong></li>
+          <li><span>Ugens pligter:</span> <strong id="choreCount">0 aktive</strong></li>
+          <li><span>Fuldført:</span> <strong id="doneCount">0 total</strong></li>
+        </ul>
+        <p class="note">Tip: Tilføj varer og pligter løbende fra mobilen.</p>
       </div>
     </header>
-    <div class="animals-float" aria-hidden="true">
-      <div class="animal float-1" title="Australian Shepherd"></div>
-      <div class="animal float-2" title="Labrador Retriever"></div>
-      <div class="animal float-3" title="Blåmejse"></div>
-      <div class="animal float-4" title="Rødstrupe"></div>
-      <div class="animal float-5" title="Flamingo"></div>
-      <div class="animal float-6" title="Søløve"></div>
-    </div>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="calendar">Kalender</button>
-      <button class="tab" data-tab="shopping">Indkøb</button>
-      <button class="tab" data-tab="bucket">Bucketlist</button>
-      <button class="tab" data-tab="chores">Pligter</button>
-    </nav>
-
-    <section id="tab-calendar" class="panel active">
-      <div class="panel-head">
-        <h2>Kalender</h2>
-        <p>Hold styr på aftaler og hyggelige planer.</p>
-      </div>
-      <div class="calendar">
-        <div class="calendar-head">
-          <button id="calPrev" class="ghost">◀</button>
-          <div id="calTitle" class="cal-title"></div>
-          <button id="calNext" class="ghost">▶</button>
-        </div>
-        <div class="calendar-weekdays">
-          <span>Man</span><span>Tir</span><span>Ons</span><span>Tor</span><span>Fre</span><span>Lør</span><span>Søn</span>
-        </div>
-        <div id="calendarGrid" class="calendar-grid"></div>
-      </div>
-      <form id="calendarForm" class="form">
-        <input name="title" placeholder="Titel" required />
-        <input name="date" type="date" required />
-        <input name="time" type="time" />
-        <select name="person">
-          <option value="arvid">Arvid</option>
-          <option value="ida">Ida</option>
-          <option value="begge" selected>Begge</option>
-        </select>
-        <input name="notes" placeholder="Noter (valgfrit)" />
-        <button class="btn" type="submit">Tilføj</button>
-      </form>
-      <div class="filters">
-        <label>
-          Vis:
-          <select id="calendarFilter">
-            <option value="alle" selected>Alle</option>
-            <option value="ida">Ida</option>
-            <option value="arvid">Arvid</option>
-            <option value="begge">Begge</option>
-          </select>
-        </label>
-      </div>
-      <div class="panel-head">
-        <h3 id="calendarDayTitle">Planer</h3>
-      </div>
-      <ul id="calendarDayList" class="list"></ul>
-    </section>
-
-    <section id="tab-shopping" class="panel">
+    <section class="panel">
       <div class="panel-head">
         <h2>Indkøbsliste</h2>
-        <p>Hurtigt overblik over det, I mangler.</p>
+        <p>Organiseret i to lister: basisvarer og andre ting.</p>
       </div>
-      <form id="shoppingForm" class="form">
-        <input name="label" placeholder="Vare" required />
-        <input name="quantity" placeholder="Mængde" />
-        <input name="category" placeholder="Kategori" />
-        <button class="btn" type="submit">Tilføj</button>
-      </form>
-      <ul id="shoppingList" class="list"></ul>
-    </section>
-
-    <section id="tab-bucket" class="panel">
-      <div class="panel-head">
-        <h2>Bucketlist</h2>
-        <p>Drømme, oplevelser og små eventyr.</p>
-      </div>
-      <form id="bucketForm" class="form">
-        <input name="label" placeholder="Idé" required />
-        <select name="priority">
-          <option value="low">Lav</option>
-          <option value="medium" selected>Medium</option>
-          <option value="high">Høj</option>
-        </select>
-        <button class="btn" type="submit">Tilføj</button>
-      </form>
-      <ul id="bucketList" class="list"></ul>
-    </section>
-
-    <section id="tab-chores" class="panel">
-      <div class="panel-head">
-        <h2>Huslige pligter</h2>
-        <p>Del opgaverne uden bøvl.</p>
-      </div>
-      <form id="choresForm" class="form">
-        <input name="label" placeholder="Opgave" required />
-        <select name="assignedTo">
-          <option value="arvid">Arvid</option>
-          <option value="ida">Ida</option>
-          <option value="begge" selected>Begge</option>
-        </select>
-        <input name="dueDate" type="date" />
-        <button class="btn" type="submit">Tilføj</button>
-      </form>
-      <div class="filters">
+      <form id="shoppingForm" class="grid-form">
         <label>
-          Vis:
-          <select id="choresFilter">
-            <option value="alle" selected>Alle</option>
-            <option value="ida">Ida</option>
-            <option value="arvid">Arvid</option>
-            <option value="begge">Begge</option>
+          Vare
+          <input name="itemName" placeholder="Fx: Mælk" required />
+        </label>
+        <label>
+          Liste
+          <select name="category">
+            <option value="basis" selected>Basisvarer</option>
+            <option value="other">Andre ting</option>
           </select>
         </label>
+        <button class="btn" type="submit">Tilføj vare</button>
+      </form>
+      <div class="shopping-columns">
+        <article class="list-card">
+          <h3>Basisvarer</h3>
+          <ul id="basisList" class="todo-list"></ul>
+        </article>
+        <article class="list-card">
+          <h3>Andre ting</h3>
+          <ul id="otherList" class="todo-list"></ul>
+        </article>
       </div>
-      <ul id="choresList" class="list"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Huslige pligter - ugeplan</h2>
+        <p>Tilføj pligter til en bestemt dag og hak af når de er løst.</p>
+      </div>
+      <form id="choreForm" class="grid-form">
+        <label>
+          Pligt
+          <input name="choreName" placeholder="Fx: Støvsuge stue" required />
+        </label>
+        <label>
+          Dag
+          <select name="weekday">
+            <option value="mon">Mandag</option>
+            <option value="tue">Tirsdag</option>
+            <option value="wed">Onsdag</option>
+            <option value="thu">Torsdag</option>
+            <option value="fri">Fredag</option>
+            <option value="sat">Lørdag</option>
+            <option value="sun">Søndag</option>
+          </select>
+        </label>
+        <label>
+          Ansvarlig
+          <select name="assignee">
+            <option value="Begge" selected>Begge</option>
+            <option value="Ida">Ida</option>
+            <option value="Arvid">Arvid</option>
+          </select>
+        </label>
+        <button class="btn" type="submit">Tilføj pligt</button>
+      </form>
+      <div class="week-grid">
+        <article class="day-card"><h3>Mandag</h3><ul id="chores-mon" class="todo-list"></ul></article>
+        <article class="day-card"><h3>Tirsdag</h3><ul id="chores-tue" class="todo-list"></ul></article>
+        <article class="day-card"><h3>Onsdag</h3><ul id="chores-wed" class="todo-list"></ul></article>
+        <article class="day-card"><h3>Torsdag</h3><ul id="chores-thu" class="todo-list"></ul></article>
+        <article class="day-card"><h3>Fredag</h3><ul id="chores-fri" class="todo-list"></ul></article>
+        <article class="day-card"><h3>Lørdag</h3><ul id="chores-sat" class="todo-list"></ul></article>
+        <article class="day-card"><h3>Søndag</h3><ul id="chores-sun" class="todo-list"></ul></article>
+      </div>
     </section>
   </main>
-
-  <template id="listItemTemplate">
-    <li class="list-item">
-      <label class="checkbox">
-        <input type="checkbox" />
-        <span class="check"></span>
-      </label>
-      <div class="item-body">
-        <div class="item-title"></div>
-        <div class="item-meta"></div>
-      </div>
-      <div class="item-actions">
-        <button class="ghost edit">Redigér</button>
-        <button class="ghost danger delete">Slet</button>
-      </div>
-    </li>
-  </template>
 
   <script type="module" src="app.js"></script>
 </body>
